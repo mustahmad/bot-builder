@@ -11,6 +11,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = parseInt(process.env.PORT || '3001', 10);
 
+console.log(`PORT=${PORT}, DATABASE_URL=${process.env.DATABASE_URL ? 'set' : 'NOT SET'}`);
+
+// Health check
+app.get('/health', (_req, res) => {
+  res.json({ status: 'ok' });
+});
+
 // Middleware
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
