@@ -5,7 +5,6 @@ WORKDIR /app
 # Копируем файлы зависимостей
 COPY package.json package-lock.json ./
 COPY prisma ./prisma/
-COPY prisma.config.ts ./
 
 # Устанавливаем зависимости
 RUN npm ci
@@ -23,4 +22,4 @@ RUN npm run build
 EXPOSE 3001
 
 # Запускаем сервер
-CMD ["sh", "-c", "npx prisma db push && npm start"]
+CMD ["sh", "-c", "npx prisma db push; npm start"]
