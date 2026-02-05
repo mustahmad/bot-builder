@@ -1,0 +1,31 @@
+import { Handle, Position } from '@xyflow/react';
+import type { NodeProps } from '@xyflow/react';
+import { Radio } from 'lucide-react';
+
+export function BroadcastNode({ data }: NodeProps) {
+  const message = data.message as string;
+
+  return (
+    <div className="bg-white rounded-lg min-w-[180px] max-w-[260px] overflow-hidden">
+      <div className="flex items-center gap-1.5 px-3 py-2 bg-[var(--color-node-broadcast)] text-white text-xs font-medium">
+        <Radio size={13} />
+        <span>Рассылка</span>
+      </div>
+      <div className="px-3 py-2.5">
+        <div className="text-sm text-[var(--color-text)] leading-snug line-clamp-2">
+          {message || 'Введите текст рассылки...'}
+        </div>
+      </div>
+      <Handle
+        type="target"
+        position={Position.Top}
+        className="!bg-[var(--color-node-broadcast)]"
+      />
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        className="!bg-[var(--color-node-broadcast)]"
+      />
+    </div>
+  );
+}
