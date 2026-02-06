@@ -90,14 +90,10 @@ function processFlow(
           timestamp: Date.now(),
         });
 
-        // If there's a button node, also follow its outgoing edges
+        // If there are buttons, STOP processing and wait for user interaction
+        // Flow will continue when user clicks a button via simulateButtonClick
         if (buttonNode) {
-          const btnNext = findNextNodes(nodes, edges, buttonNode.id);
-          // Don't auto-follow button edges - they need user interaction
-          // But follow non-callback button edges
-          queue.push(
-            ...btnNext.filter((n) => n.type !== 'condition')
-          );
+          break;
         }
         queue.push(...otherNext);
         break;
