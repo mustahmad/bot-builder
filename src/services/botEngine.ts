@@ -423,8 +423,38 @@ export function handleUpdate(
     if (chatId && callbackData) {
       const { messages: responses } = simulateButtonClick(callbackData, nodes, edges);
       for (const response of responses) {
+        let replyMarkup: unknown = undefined;
+
+        if (response.buttons && response.buttons.length > 0) {
+          const inlineButtons = response.buttons.filter(
+            (b: ButtonItem) => b.buttonType === 'inline'
+          );
+          const replyButtons = response.buttons.filter(
+            (b: ButtonItem) => b.buttonType === 'reply'
+          );
+
+          if (inlineButtons.length > 0) {
+            replyMarkup = {
+              inline_keyboard: inlineButtons.map((b: ButtonItem) => [
+                {
+                  text: b.text,
+                  callback_data: b.callbackData || b.text,
+                  url: b.url || undefined,
+                },
+              ]),
+            };
+          } else if (replyButtons.length > 0) {
+            replyMarkup = {
+              keyboard: replyButtons.map((b: ButtonItem) => [{ text: b.text }]),
+              resize_keyboard: true,
+            };
+          }
+        }
+
         telegramApi
-          .sendMessage(token, chatId, response.text)
+          .sendMessage(token, chatId, response.text, {
+            replyMarkup,
+          })
           .catch(console.error);
       }
     }
