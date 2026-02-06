@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useBotStore } from '../store/botStore.ts';
 import { useFlowStore } from '../store/flowStore.ts';
 import { useSimulatorStore } from '../store/simulatorStore.ts';
+import { useProjectStore } from '../store/projectStore.ts';
 
 const SESSION_TIMEOUT_MS = 20 * 60 * 1000; // 20 minutes
 
@@ -10,6 +11,8 @@ export function useSessionTimeout() {
   const clearFlow = useFlowStore((s) => s.clearFlow);
   const clearMessages = useSimulatorStore((s) => s.clearMessages);
   const isConnected = useBotStore((s) => s.isConnected);
+  const activeProjectId = useProjectStore((s) => s.activeProjectId);
+  const saveProjectFlow = useProjectStore((s) => s.saveProjectFlow);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const resetTimer = useCallback(() => {
@@ -18,13 +21,18 @@ export function useSessionTimeout() {
     }
     if (!isConnected) return;
 
-    timerRef.current = setTimeout(() => {
+    timerRef.current = setTimeout(async () => {
+      // Save flow before disconnecting
+      if (activeProjectId) {
+        const { nodes, edges } = useFlowStore.getState();
+        await saveProjectFlow(activeProjectId, nodes, edges).catch(() => {});
+      }
       disconnect();
       clearFlow();
       clearMessages();
       sessionStorage.clear();
     }, SESSION_TIMEOUT_MS);
-  }, [isConnected, disconnect, clearFlow, clearMessages]);
+  }, [isConnected, disconnect, clearFlow, clearMessages, activeProjectId, saveProjectFlow]);
 
   useEffect(() => {
     if (!isConnected) return;

@@ -20,6 +20,7 @@ router.get('/', async (req, res) => {
         name: true,
         nodes: true,
         edges: true,
+        botToken: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -47,6 +48,7 @@ router.post('/', async (req, res) => {
         name: true,
         nodes: true,
         edges: true,
+        botToken: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -63,7 +65,7 @@ router.put('/:id', async (req, res) => {
   try {
     const authReq = req as AuthRequest;
     const { id } = req.params;
-    const { name, nodes, edges } = req.body;
+    const { name, nodes, edges, botToken } = req.body;
 
     // Проверяем, что проект принадлежит пользователю
     const existing = await prisma.project.findFirst({
@@ -79,6 +81,7 @@ router.put('/:id', async (req, res) => {
     if (name !== undefined) data.name = name;
     if (nodes !== undefined) data.nodes = nodes;
     if (edges !== undefined) data.edges = edges;
+    if (botToken !== undefined) data.botToken = botToken;
 
     const project = await prisma.project.update({
       where: { id },
@@ -88,6 +91,7 @@ router.put('/:id', async (req, res) => {
         name: true,
         nodes: true,
         edges: true,
+        botToken: true,
         createdAt: true,
         updatedAt: true,
       },

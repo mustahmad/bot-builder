@@ -5,6 +5,10 @@ import {
   LayoutGrid,
   GitBranch,
   Radio,
+  ImageIcon,
+  Clock,
+  Globe,
+  MessageCircleQuestion,
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';
@@ -60,6 +64,38 @@ const BLOCKS: PaletteBlock[] = [
     color: 'var(--color-node-broadcast)',
     icon: <Radio size={16} />,
   },
+  {
+    type: 'image',
+    label: 'Изображение',
+    description: 'Отправляет фото с подписью пользователю.',
+    example: 'Укажите URL картинки и добавьте подпись.',
+    color: 'var(--color-node-image)',
+    icon: <ImageIcon size={16} />,
+  },
+  {
+    type: 'delay',
+    label: 'Задержка',
+    description: 'Пауза перед следующим действием.',
+    example: 'Добавьте паузу между сообщениями для естественного ритма.',
+    color: 'var(--color-node-delay)',
+    icon: <Clock size={16} />,
+  },
+  {
+    type: 'apiRequest',
+    label: 'API запрос',
+    description: 'HTTP запрос к внешнему сервису.',
+    example: 'Получайте данные с сервера. Два выхода: Успех и Ошибка.',
+    color: 'var(--color-node-apiRequest)',
+    icon: <Globe size={16} />,
+  },
+  {
+    type: 'inputWait',
+    label: 'Ожидание ввода',
+    description: 'Ждёт текстовый ответ пользователя.',
+    example: 'Задайте вопрос и сохраните ответ в переменную.',
+    color: 'var(--color-node-inputWait)',
+    icon: <MessageCircleQuestion size={16} />,
+  },
 ];
 
 const DEFAULT_DATA: Record<string, Record<string, unknown>> = {
@@ -68,6 +104,10 @@ const DEFAULT_DATA: Record<string, Record<string, unknown>> = {
   buttons: { buttons: [], layout: 'vertical' },
   condition: { conditionType: 'text_equals', value: '' },
   broadcast: { message: '', parseMode: 'HTML' },
+  image: { imageUrl: '', caption: '', parseMode: 'HTML' },
+  delay: { delaySeconds: 3, showTyping: true },
+  apiRequest: { url: '', method: 'GET', headers: '', body: '', responseVariable: '' },
+  inputWait: { promptText: '', variableName: '', validation: 'none', errorText: '' },
 };
 
 export function BlockPalette() {

@@ -14,6 +14,8 @@ export function TokenScreen() {
   const error = useBotStore((s) => s.error);
   const setError = useBotStore((s) => s.setError);
   const setView = useProjectStore((s) => s.setView);
+  const activeProjectId = useProjectStore((s) => s.activeProjectId);
+  const saveBotToken = useProjectStore((s) => s.saveBotToken);
 
   const handleConnect = async () => {
     const trimmed = tokenInput.trim();
@@ -30,6 +32,10 @@ export function TokenScreen() {
       setToken(trimmed);
       setBotInfo(info);
       setConnected(true);
+      // Save token to database for auto-connect next time
+      if (activeProjectId) {
+        saveBotToken(activeProjectId, trimmed);
+      }
     } catch (err) {
       setError(
         err instanceof Error
@@ -112,7 +118,7 @@ export function TokenScreen() {
             <span className="font-medium text-[var(--color-text-secondary)]">
               @BotFather
             </span>{' '}
-            в Telegram. Токен не сохраняется.
+            в Telegram. Токен сохраняется в проекте.
           </p>
         </div>
 

@@ -9,6 +9,11 @@ import {
 import type { ReactFlowInstance } from '@xyflow/react';
 import { useFlowStore } from '../store/flowStore.ts';
 import { nodeTypes } from './nodes/index.ts';
+import { DeletableEdge } from './edges/DeletableEdge.tsx';
+
+const edgeTypes = {
+  deletable: DeletableEdge,
+};
 
 export function FlowEditor() {
   const nodes = useFlowStore((s) => s.nodes);
@@ -60,6 +65,13 @@ export function FlowEditor() {
     [setSelectedNode]
   );
 
+  const onEdgeClick = useCallback(
+    () => {
+      setSelectedNode(null);
+    },
+    [setSelectedNode]
+  );
+
   const onPaneClick = useCallback(() => {
     setSelectedNode(null);
   }, [setSelectedNode]);
@@ -78,12 +90,16 @@ export function FlowEditor() {
         onDrop={onDrop}
         onDragOver={onDragOver}
         onNodeClick={onNodeClick}
+        onEdgeClick={onEdgeClick}
         onPaneClick={onPaneClick}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
+        deleteKeyCode={['Backspace', 'Delete']}
         fitView
         snapToGrid
         snapGrid={[16, 16]}
         defaultEdgeOptions={{
+          type: 'deletable',
           animated: true,
           style: { stroke: '#94a3b8', strokeWidth: 2 },
         }}
@@ -106,6 +122,10 @@ export function FlowEditor() {
               buttons: 'var(--color-node-buttons)',
               condition: 'var(--color-node-condition)',
               broadcast: 'var(--color-node-broadcast)',
+              image: 'var(--color-node-image)',
+              delay: 'var(--color-node-delay)',
+              apiRequest: 'var(--color-node-apiRequest)',
+              inputWait: 'var(--color-node-inputWait)',
             };
             return colors[node.type || ''] || '#94a3b8';
           }}

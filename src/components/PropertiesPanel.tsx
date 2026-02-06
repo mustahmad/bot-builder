@@ -9,6 +9,10 @@ import {
   LayoutGrid,
   GitBranch,
   Radio,
+  ImageIcon,
+  Clock,
+  Globe,
+  MessageCircleQuestion,
 } from 'lucide-react';
 import { useFlowStore } from '../store/flowStore.ts';
 import type { ButtonItem } from '../types/index.ts';
@@ -41,6 +45,26 @@ const NODE_META: Record<
     label: 'Рассылка',
     color: 'var(--color-node-broadcast)',
     icon: <Radio size={14} />,
+  },
+  image: {
+    label: 'Изображение',
+    color: 'var(--color-node-image)',
+    icon: <ImageIcon size={14} />,
+  },
+  delay: {
+    label: 'Задержка',
+    color: 'var(--color-node-delay)',
+    icon: <Clock size={14} />,
+  },
+  apiRequest: {
+    label: 'API запрос',
+    color: 'var(--color-node-apiRequest)',
+    icon: <Globe size={14} />,
+  },
+  inputWait: {
+    label: 'Ожидание ввода',
+    color: 'var(--color-node-inputWait)',
+    icon: <MessageCircleQuestion size={14} />,
   },
 };
 
@@ -345,6 +369,164 @@ function BroadcastProperties({ data, update }: { data: Record<string, unknown>; 
   );
 }
 
+function ImageProperties({ data, update }: { data: Record<string, unknown>; update: (d: Record<string, unknown>) => void }) {
+  return (
+    <div className="flex flex-col gap-3">
+      <InputField
+        label="URL изображения"
+        value={(data.imageUrl as string) || ''}
+        onChange={(v) => update({ imageUrl: v })}
+        placeholder="https://example.com/photo.jpg"
+        mono
+      />
+      <TextareaField
+        label="Подпись"
+        value={(data.caption as string) || ''}
+        onChange={(v) => update({ caption: v })}
+        placeholder="Подпись к изображению (необязательно)"
+        rows={2}
+      />
+      <SelectField
+        label="Режим разметки"
+        value={(data.parseMode as string) || 'HTML'}
+        onChange={(v) => update({ parseMode: v })}
+        options={[
+          { value: 'HTML', label: 'HTML' },
+          { value: 'MarkdownV2', label: 'MarkdownV2' },
+        ]}
+      />
+    </div>
+  );
+}
+
+function DelayProperties({ data, update }: { data: Record<string, unknown>; update: (d: Record<string, unknown>) => void }) {
+  return (
+    <div className="flex flex-col gap-3">
+      <InputField
+        label="Задержка (секунды)"
+        value={String((data.delaySeconds as number) ?? 3)}
+        onChange={(v) => update({ delaySeconds: Math.max(0, Number(v) || 0) })}
+        placeholder="3"
+        type="number"
+      />
+      <div>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={(data.showTyping as boolean) ?? true}
+            onChange={(e) => update({ showTyping: e.target.checked })}
+            className="rounded border-[var(--color-border)] accent-[var(--color-node-delay)]"
+          />
+          <span className="text-xs text-[var(--color-text-secondary)]">
+            Показывать «печатает...»
+          </span>
+        </label>
+      </div>
+      <div className="text-[10px] text-[var(--color-text-muted)] leading-relaxed">
+        Бот подождёт указанное время перед выполнением следующего блока.
+      </div>
+    </div>
+  );
+}
+
+function ApiRequestProperties({ data, update }: { data: Record<string, unknown>; update: (d: Record<string, unknown>) => void }) {
+  const method = (data.method as string) || 'GET';
+
+  return (
+    <div className="flex flex-col gap-3">
+      <SelectField
+        label="HTTP метод"
+        value={method}
+        onChange={(v) => update({ method: v })}
+        options={[
+          { value: 'GET', label: 'GET' },
+          { value: 'POST', label: 'POST' },
+          { value: 'PUT', label: 'PUT' },
+          { value: 'DELETE', label: 'DELETE' },
+        ]}
+      />
+      <InputField
+        label="URL"
+        value={(data.url as string) || ''}
+        onChange={(v) => update({ url: v })}
+        placeholder="https://api.example.com/data"
+        mono
+      />
+      <TextareaField
+        label="Заголовки (JSON)"
+        value={(data.headers as string) || ''}
+        onChange={(v) => update({ headers: v })}
+        placeholder='{"Authorization": "Bearer ..."}'
+        rows={2}
+      />
+      {(method === 'POST' || method === 'PUT') && (
+        <TextareaField
+          label="Тело запроса (JSON)"
+          value={(data.body as string) || ''}
+          onChange={(v) => update({ body: v })}
+          placeholder='{"key": "value"}'
+          rows={3}
+        />
+      )}
+      <InputField
+        label="Сохранить ответ в переменную"
+        value={(data.responseVariable as string) || ''}
+        onChange={(v) => update({ responseVariable: v })}
+        placeholder="api_response"
+        mono
+      />
+      <div className="text-[10px] text-[var(--color-text-muted)] leading-relaxed">
+        Соедините зелёный выход (Успех) и красный выход (Ошибка) с разными блоками.
+      </div>
+    </div>
+  );
+}
+
+function InputWaitProperties({ data, update }: { data: Record<string, unknown>; update: (d: Record<string, unknown>) => void }) {
+  const validation = (data.validation as string) || 'none';
+
+  return (
+    <div className="flex flex-col gap-3">
+      <TextareaField
+        label="Текст запроса"
+        value={(data.promptText as string) || ''}
+        onChange={(v) => update({ promptText: v })}
+        placeholder="Введите ваш email..."
+        rows={2}
+      />
+      <InputField
+        label="Имя переменной"
+        value={(data.variableName as string) || ''}
+        onChange={(v) => update({ variableName: v })}
+        placeholder="user_email"
+        mono
+      />
+      <SelectField
+        label="Валидация"
+        value={validation}
+        onChange={(v) => update({ validation: v })}
+        options={[
+          { value: 'none', label: 'Без валидации' },
+          { value: 'email', label: 'Email' },
+          { value: 'phone', label: 'Телефон' },
+          { value: 'number', label: 'Число' },
+        ]}
+      />
+      {validation !== 'none' && (
+        <InputField
+          label="Текст ошибки"
+          value={(data.errorText as string) || ''}
+          onChange={(v) => update({ errorText: v })}
+          placeholder="Неверный формат, попробуйте ещё раз"
+        />
+      )}
+      <div className="text-[10px] text-[var(--color-text-muted)] leading-relaxed">
+        Бот отправит текст запроса и подождёт ответ пользователя. Ответ сохранится в указанную переменную.
+      </div>
+    </div>
+  );
+}
+
 export function PropertiesPanel() {
   const selectedNodeId = useFlowStore((s) => s.selectedNodeId);
   const nodes = useFlowStore((s) => s.nodes);
@@ -429,6 +611,18 @@ export function PropertiesPanel() {
         )}
         {selectedNode.type === 'broadcast' && (
           <BroadcastProperties data={data} update={update} />
+        )}
+        {selectedNode.type === 'image' && (
+          <ImageProperties data={data} update={update} />
+        )}
+        {selectedNode.type === 'delay' && (
+          <DelayProperties data={data} update={update} />
+        )}
+        {selectedNode.type === 'apiRequest' && (
+          <ApiRequestProperties data={data} update={update} />
+        )}
+        {selectedNode.type === 'inputWait' && (
+          <InputWaitProperties data={data} update={update} />
         )}
       </div>
     </div>

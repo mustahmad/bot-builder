@@ -10,6 +10,7 @@ import {
   Check,
   ArrowLeft,
   GraduationCap,
+  CloudOff,
 } from 'lucide-react';
 import { useBotStore } from '../store/botStore.ts';
 import { useFlowStore } from '../store/flowStore.ts';
@@ -17,8 +18,14 @@ import { useSimulatorStore } from '../store/simulatorStore.ts';
 import { useProjectStore } from '../store/projectStore.ts';
 import { usePolling } from '../hooks/usePolling.ts';
 import { deployBot } from '../services/botEngine.ts';
+import type { SaveStatus } from '../hooks/useAutoSave.ts';
 
-export function Header() {
+interface HeaderProps {
+  saveStatus?: SaveStatus;
+  onForceSave?: () => Promise<void>;
+}
+
+export function Header({ saveStatus = 'idle', onForceSave }: HeaderProps) {
   const botInfo = useBotStore((s) => s.botInfo);
   const token = useBotStore((s) => s.token);
   const isDeployed = useBotStore((s) => s.isDeployed);
@@ -34,7 +41,7 @@ export function Header() {
   const clearMessages = useSimulatorStore((s) => s.clearMessages);
   const setView = useProjectStore((s) => s.setView);
   const activeProjectId = useProjectStore((s) => s.activeProjectId);
-  const saveProjectFlow = useProjectStore((s) => s.saveProjectFlow);
+  const saveBotToken = useProjectStore((s) => s.saveBotToken);
   const { pollingActive, startPolling, stopPolling } = usePolling();
 
   const [deploying, setDeploying] = useState(false);
@@ -108,9 +115,7 @@ export function Header() {
   };
 
   const handleBackToProjects = async () => {
-    if (activeProjectId) {
-      await saveProjectFlow(activeProjectId, nodes, edges);
-    }
+    if (onForceSave) await onForceSave();
     stopPolling();
     disconnect();
     clearFlow();
@@ -120,20 +125,21 @@ export function Header() {
   };
 
   const handleDisconnect = async () => {
+    if (onForceSave) await onForceSave();
+    // Clear saved token from database so user can enter a new one
     if (activeProjectId) {
-      await saveProjectFlow(activeProjectId, nodes, edges);
+      saveBotToken(activeProjectId, null);
     }
     stopPolling();
     disconnect();
     clearFlow();
     clearMessages();
     sessionStorage.clear();
+    setView('token');
   };
 
   const handleTutorial = async () => {
-    if (activeProjectId) {
-      await saveProjectFlow(activeProjectId, nodes, edges);
-    }
+    if (onForceSave) await onForceSave();
     stopPolling();
     disconnect();
     clearFlow();
@@ -172,6 +178,40 @@ export function Header() {
                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse-dot" />
                 <span className="text-[10px] font-medium">Активен</span>
               </div>
+            )}
+          </div>
+        )}
+        {/* Save status indicator */}
+        {saveStatus !== 'idle' && (
+          <div
+            className={`flex items-center gap-1.5 ml-3 pl-3 border-l border-[var(--color-border)] text-xs ${
+              saveStatus === 'saving'
+                ? 'text-blue-500'
+                : saveStatus === 'saved'
+                  ? 'text-emerald-500'
+                  : 'text-amber-500'
+            }`}
+          >
+            {saveStatus === 'saving' && (
+              <>
+                <div className="w-3 h-3 border-2 border-blue-300 border-t-blue-500 rounded-full animate-spin" />
+                <span>Сохранение...</span>
+              </>
+            )}
+            {saveStatus === 'saved' && (
+              <>
+                <Check size={13} />
+                <span>Сохранено</span>
+              </>
+            )}
+            {saveStatus === 'error' && (
+              <button
+                onClick={onForceSave}
+                className="flex items-center gap-1.5 hover:text-amber-600 cursor-pointer"
+              >
+                <CloudOff size={13} />
+                <span>Ошибка. Повторить?</span>
+              </button>
             )}
           </div>
         )}

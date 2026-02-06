@@ -2,15 +2,25 @@ import { useState, useRef, useEffect } from 'react';
 import { Send, Trash2 } from 'lucide-react';
 import { useSimulatorStore } from '../store/simulatorStore.ts';
 import { useFlowStore } from '../store/flowStore.ts';
-import { simulateInput, simulateButtonClick } from '../services/botEngine.ts';
+import { simulateInput, simulateButtonClick, continueFromInputWait } from '../services/botEngine.ts';
+import type { SimulationResult } from '../services/botEngine.ts';
 import type { ButtonItem } from '../types/index.ts';
+
+function applyResult(result: SimulationResult) {
+  const { addMessages, setPendingInput } = useSimulatorStore.getState();
+  if (result.messages.length > 0) {
+    addMessages(result.messages);
+  }
+  setPendingInput(result.pendingInputNodeId);
+}
 
 export function ChatSimulator() {
   const [input, setInput] = useState('');
   const messages = useSimulatorStore((s) => s.messages);
   const addMessage = useSimulatorStore((s) => s.addMessage);
-  const addMessages = useSimulatorStore((s) => s.addMessages);
   const clearMessages = useSimulatorStore((s) => s.clearMessages);
+  const pendingInputNodeId = useSimulatorStore((s) => s.pendingInputNodeId);
+  const setVariable = useSimulatorStore((s) => s.setVariable);
   const nodes = useFlowStore((s) => s.nodes);
   const edges = useFlowStore((s) => s.edges);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -30,14 +40,29 @@ export function ChatSimulator() {
       timestamp: Date.now(),
     });
 
-    const responses = simulateInput(trimmed, nodes, edges);
-    if (responses.length > 0) {
+    setInput('');
+
+    // If waiting for user input, save variable and continue from that node
+    if (pendingInputNodeId) {
+      const pendingNode = nodes.find((n) => n.id === pendingInputNodeId);
+      if (pendingNode) {
+        const data = pendingNode.data as Record<string, unknown>;
+        const varName = (data.variableName as string) || '';
+        if (varName) {
+          setVariable(varName, trimmed);
+        }
+      }
       setTimeout(() => {
-        addMessages(responses);
+        const result = continueFromInputWait(pendingInputNodeId, nodes, edges);
+        applyResult(result);
       }, 300);
+      return;
     }
 
-    setInput('');
+    setTimeout(() => {
+      const result = simulateInput(trimmed, nodes, edges);
+      applyResult(result);
+    }, 300);
   };
 
   const handleButtonClick = (btn: ButtonItem) => {
@@ -53,16 +78,14 @@ export function ChatSimulator() {
       timestamp: Date.now(),
     });
 
-    const responses = simulateButtonClick(
-      btn.callbackData || btn.text,
-      nodes,
-      edges
-    );
-    if (responses.length > 0) {
-      setTimeout(() => {
-        addMessages(responses);
-      }, 300);
-    }
+    setTimeout(() => {
+      const result = simulateButtonClick(
+        btn.callbackData || btn.text,
+        nodes,
+        edges
+      );
+      applyResult(result);
+    }, 300);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -138,7 +161,7 @@ export function ChatSimulator() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Введите /start или сообщение..."
+            placeholder={pendingInputNodeId ? 'Введите ответ...' : 'Введите /start или сообщение...'}
             className="flex-1 px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-alt)] text-sm placeholder:text-[var(--color-text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)]/40 focus:border-[var(--color-primary)] transition-all"
           />
           <button

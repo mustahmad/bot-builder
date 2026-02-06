@@ -16,6 +16,8 @@ import {
 import { useProjectStore } from '../store/projectStore.ts';
 import { useAuthStore } from '../store/authStore.ts';
 import { useFlowStore } from '../store/flowStore.ts';
+import { useBotStore } from '../store/botStore.ts';
+import { getMe } from '../services/telegramApi.ts';
 
 export function ProjectsPage() {
   const projects = useProjectStore((s) => s.projects);
@@ -28,8 +30,14 @@ export function ProjectsPage() {
   const setView = useProjectStore((s) => s.setView);
   const setNodes = useFlowStore((s) => s.setNodes);
   const setEdges = useFlowStore((s) => s.setEdges);
+  const saveBotToken = useProjectStore((s) => s.saveBotToken);
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
+  const setToken = useBotStore((s) => s.setToken);
+  const setBotInfo = useBotStore((s) => s.setBotInfo);
+  const setConnected = useBotStore((s) => s.setConnected);
+  const setConnecting = useBotStore((s) => s.setConnecting);
+  const setError = useBotStore((s) => s.setError);
 
   const [newName, setNewName] = useState('');
   const [showNewInput, setShowNewInput] = useState(false);
@@ -58,13 +66,35 @@ export function ProjectsPage() {
     }
   };
 
-  const handleOpen = (id: string) => {
+  const handleOpen = async (id: string) => {
     const project = projects.find((p) => p.id === id);
     if (!project) return;
     setActiveProject(id);
     setNodes(project.nodes);
     setEdges(project.edges);
-    setView('token');
+
+    // If project has a saved bot token, try auto-connect
+    if (project.botToken) {
+      setView('workspace'); // Go to workspace immediately
+      setConnecting(true);
+      setError(null);
+      try {
+        const info = await getMe(project.botToken);
+        setToken(project.botToken);
+        setBotInfo(info);
+        setConnected(true);
+      } catch {
+        // Token is invalid — clear it and show token screen
+        saveBotToken(id, null);
+        setConnecting(false);
+        setView('token');
+        setError('Сохранённый токен недействителен. Введите новый токен.');
+      } finally {
+        setConnecting(false);
+      }
+    } else {
+      setView('token');
+    }
   };
 
   const handleStartRename = (id: string, currentName: string) => {

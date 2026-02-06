@@ -5,14 +5,16 @@ import { FlowEditor } from './FlowEditor.tsx';
 import { PropertiesPanel } from './PropertiesPanel.tsx';
 import { ChatSimulator } from './ChatSimulator.tsx';
 import { useFlowStore } from '../store/flowStore.ts';
+import { useAutoSave } from '../hooks/useAutoSave.ts';
 
 export function Workspace() {
   const selectedNodeId = useFlowStore((s) => s.selectedNodeId);
+  const { status: saveStatus, forceSave } = useAutoSave();
 
   return (
     <ReactFlowProvider>
       <div className="flex flex-col h-screen w-screen">
-        <Header />
+        <Header saveStatus={saveStatus} onForceSave={forceSave} />
         <div className="flex flex-1 overflow-hidden">
           {/* Left: Block Palette */}
           <BlockPalette />

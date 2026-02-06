@@ -12,6 +12,7 @@ import { useSessionTimeout } from './hooks/useSessionTimeout.ts';
 
 function App() {
   const isConnected = useBotStore((s) => s.isConnected);
+  const isConnecting = useBotStore((s) => s.isConnecting);
   const view = useProjectStore((s) => s.view);
   const showOnboarding = useProjectStore((s) => s.showOnboarding);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -49,7 +50,19 @@ function App() {
       case 'token':
         return isConnected ? <Workspace /> : <TokenScreen />;
       case 'workspace':
-        return isConnected ? <Workspace /> : <TokenScreen />;
+        if (isConnected) return <Workspace />;
+        if (isConnecting) {
+          // Show connecting spinner during auto-connect
+          return (
+            <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
+              <div className="flex flex-col items-center gap-3 animate-fade-in">
+                <div className="w-8 h-8 border-3 border-[var(--color-primary)]/30 border-t-[var(--color-primary)] rounded-full animate-spin" />
+                <p className="text-sm text-[var(--color-text-muted)]">Подключение к боту...</p>
+              </div>
+            </div>
+          );
+        }
+        return <TokenScreen />;
       default:
         return <ProjectsPage />;
     }

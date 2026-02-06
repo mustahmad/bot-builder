@@ -23,6 +23,7 @@ model Project {
   name      String
   nodes     Json     @default("[]")
   edges     Json     @default("[]")
+  botToken  String?  @map("bot_token")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
   userId    String   @map("user_id")

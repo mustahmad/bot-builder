@@ -35,12 +35,42 @@ export interface BroadcastNodeData extends Record<string, unknown> {
   parseMode: 'HTML' | 'MarkdownV2';
 }
 
+export interface ImageNodeData extends Record<string, unknown> {
+  imageUrl: string;
+  caption: string;
+  parseMode: 'HTML' | 'MarkdownV2';
+}
+
+export interface DelayNodeData extends Record<string, unknown> {
+  delaySeconds: number;
+  showTyping: boolean;
+}
+
+export interface ApiRequestNodeData extends Record<string, unknown> {
+  url: string;
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  headers: string;
+  body: string;
+  responseVariable: string;
+}
+
+export interface InputWaitNodeData extends Record<string, unknown> {
+  promptText: string;
+  variableName: string;
+  validation: 'none' | 'email' | 'phone' | 'number';
+  errorText: string;
+}
+
 export type BotNodeData =
   | CommandNodeData
   | MessageNodeData
   | ButtonsNodeData
   | ConditionNodeData
-  | BroadcastNodeData;
+  | BroadcastNodeData
+  | ImageNodeData
+  | DelayNodeData
+  | ApiRequestNodeData
+  | InputWaitNodeData;
 
 export type BotNode = Node<BotNodeData>;
 export type BotEdge = Edge;

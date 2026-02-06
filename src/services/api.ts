@@ -80,6 +80,7 @@ export interface ApiProject {
   name: string;
   nodes: unknown[];
   edges: unknown[];
+  botToken: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -107,7 +108,7 @@ export async function createProject(name: string): Promise<ApiProject> {
 
 export async function updateProject(
   id: string,
-  updates: { name?: string; nodes?: unknown[]; edges?: unknown[] }
+  updates: { name?: string; nodes?: unknown[]; edges?: unknown[]; botToken?: string | null }
 ): Promise<ApiProject> {
   const data = await request<ProjectResponse>(`/projects/${id}`, {
     method: 'PUT',

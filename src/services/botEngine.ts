@@ -2,6 +2,11 @@ import type { Node, Edge } from '@xyflow/react';
 import type { SimMessage, ButtonItem, TelegramUpdate } from '../types/index.ts';
 import * as telegramApi from './telegramApi.ts';
 
+export interface SimulationResult {
+  messages: SimMessage[];
+  pendingInputNodeId: string | null;
+}
+
 // Find a command node matching the input
 function findCommandNode(nodes: Node[], command: string): Node | undefined {
   return nodes.find(
@@ -32,7 +37,7 @@ function processFlow(
   nodes: Node[],
   edges: Edge[],
   userInput?: string
-): SimMessage[] {
+): SimulationResult {
   const messages: SimMessage[] = [];
   const visited = new Set<string>();
   const queue: Node[] = [startNode];
@@ -132,10 +137,67 @@ function processFlow(
         queue.push(...nextNodes);
         break;
       }
+
+      case 'image': {
+        const imageUrl = (data.imageUrl as string) || '';
+        const caption = (data.caption as string) || '';
+        const display = caption
+          ? `[Изображение] ${caption}`
+          : `[Изображение: ${imageUrl || 'нет URL'}]`;
+        messages.push({
+          id: crypto.randomUUID(),
+          sender: 'bot',
+          text: display,
+          timestamp: Date.now(),
+        });
+        queue.push(...nextNodes);
+        break;
+      }
+
+      case 'delay': {
+        const seconds = (data.delaySeconds as number) ?? 3;
+        const showTyping = (data.showTyping as boolean) ?? true;
+        messages.push({
+          id: crypto.randomUUID(),
+          sender: 'bot',
+          text: `[Задержка ${seconds} сек.${showTyping ? ' — печатает...' : ''}]`,
+          timestamp: Date.now(),
+        });
+        queue.push(...nextNodes);
+        break;
+      }
+
+      case 'apiRequest': {
+        const method = (data.method as string) || 'GET';
+        const url = (data.url as string) || '(нет URL)';
+        const responseVar = (data.responseVariable as string) || '';
+        messages.push({
+          id: crypto.randomUUID(),
+          sender: 'bot',
+          text: `[API: ${method} ${url}]${responseVar ? ` → ${responseVar}` : ''}`,
+          timestamp: Date.now(),
+        });
+        // In simulator, always follow success path
+        const successNodes = findNextNodes(nodes, edges, currentNode.id, 'success');
+        queue.push(...successNodes);
+        break;
+      }
+
+      case 'inputWait': {
+        const promptText = (data.promptText as string) || 'Ожидание ответа...';
+        messages.push({
+          id: crypto.randomUUID(),
+          sender: 'bot',
+          text: promptText,
+          timestamp: Date.now(),
+        });
+        // Pause processing — wait for user input
+        return { messages, pendingInputNodeId: currentNode.id };
+      }
     }
   }
 
-  return messages;
+  return { messages, pendingInputNodeId: null };
 }
 
 // Simulate user command or text input
@@ -143,20 +205,23 @@ export function simulateInput(
   input: string,
   nodes: Node[],
   edges: Edge[]
-): SimMessage[] {
+): SimulationResult {
   if (input.startsWith('/')) {
     const commandNode = findCommandNode(nodes, input);
     if (commandNode) {
       return processFlow(commandNode, nodes, edges, input);
     }
-    return [
-      {
-        id: crypto.randomUUID(),
-        sender: 'bot',
-        text: `Неизвестная команда: ${input}`,
-        timestamp: Date.now(),
-      },
-    ];
+    return {
+      messages: [
+        {
+          id: crypto.randomUUID(),
+          sender: 'bot',
+          text: `Неизвестная команда: ${input}`,
+          timestamp: Date.now(),
+        },
+      ],
+      pendingInputNodeId: null,
+    };
   }
 
   // For non-command text, check condition nodes
@@ -175,7 +240,7 @@ export function simulateInput(
     }
   }
 
-  return [];
+  return { messages: [], pendingInputNodeId: null };
 }
 
 // Simulate a button click
@@ -183,7 +248,7 @@ export function simulateButtonClick(
   callbackData: string,
   nodes: Node[],
   edges: Edge[]
-): SimMessage[] {
+): SimulationResult {
   for (const node of nodes) {
     if (node.type === 'buttons') {
       const data = node.data as Record<string, unknown>;
@@ -191,15 +256,37 @@ export function simulateButtonClick(
       const btn = buttons?.find((b) => b.callbackData === callbackData);
       if (btn) {
         const nextNodes = findNextNodes(nodes, edges, node.id);
-        const messages: SimMessage[] = [];
+        const allMessages: SimMessage[] = [];
+        let pendingId: string | null = null;
         for (const next of nextNodes) {
-          messages.push(...processFlow(next, nodes, edges, callbackData));
+          const result = processFlow(next, nodes, edges, callbackData);
+          allMessages.push(...result.messages);
+          if (result.pendingInputNodeId) pendingId = result.pendingInputNodeId;
         }
-        return messages;
+        return { messages: allMessages, pendingInputNodeId: pendingId };
       }
     }
   }
-  return [];
+  return { messages: [], pendingInputNodeId: null };
+}
+
+// Continue flow after user provides input for an inputWait node
+export function continueFromInputWait(
+  nodeId: string,
+  nodes: Node[],
+  edges: Edge[]
+): SimulationResult {
+  const nextNodes = findNextNodes(nodes, edges, nodeId);
+  const allMessages: SimMessage[] = [];
+  let pendingId: string | null = null;
+
+  for (const next of nextNodes) {
+    const result = processFlow(next, nodes, edges);
+    allMessages.push(...result.messages);
+    if (result.pendingInputNodeId) pendingId = result.pendingInputNodeId;
+  }
+
+  return { messages: allMessages, pendingInputNodeId: pendingId };
 }
 
 // Deploy bot: register commands with Telegram
@@ -231,22 +318,22 @@ export function handleUpdate(
   if (update.message?.text) {
     const chatId = update.message.chat.id;
     const text = update.message.text;
-    const responses = simulateInput(text, nodes, edges);
+    const { messages: responses } = simulateInput(text, nodes, edges);
 
     for (const response of responses) {
       let replyMarkup: unknown = undefined;
 
       if (response.buttons && response.buttons.length > 0) {
         const inlineButtons = response.buttons.filter(
-          (b) => b.buttonType === 'inline'
+          (b: ButtonItem) => b.buttonType === 'inline'
         );
         const replyButtons = response.buttons.filter(
-          (b) => b.buttonType === 'reply'
+          (b: ButtonItem) => b.buttonType === 'reply'
         );
 
         if (inlineButtons.length > 0) {
           replyMarkup = {
-            inline_keyboard: inlineButtons.map((b) => [
+            inline_keyboard: inlineButtons.map((b: ButtonItem) => [
               {
                 text: b.text,
                 callback_data: b.callbackData || b.text,
@@ -256,7 +343,7 @@ export function handleUpdate(
           };
         } else if (replyButtons.length > 0) {
           replyMarkup = {
-            keyboard: replyButtons.map((b) => [{ text: b.text }]),
+            keyboard: replyButtons.map((b: ButtonItem) => [{ text: b.text }]),
             resize_keyboard: true,
           };
         }
@@ -279,7 +366,7 @@ export function handleUpdate(
       .catch(console.error);
 
     if (chatId && callbackData) {
-      const responses = simulateButtonClick(callbackData, nodes, edges);
+      const { messages: responses } = simulateButtonClick(callbackData, nodes, edges);
       for (const response of responses) {
         telegramApi
           .sendMessage(token, chatId, response.text)

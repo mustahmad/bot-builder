@@ -22,6 +22,7 @@ interface FlowState {
   addNode: (node: Node) => void;
   updateNodeData: (nodeId: string, data: Record<string, unknown>) => void;
   removeNode: (nodeId: string) => void;
+  removeEdge: (edgeId: string) => void;
   setSelectedNode: (nodeId: string | null) => void;
   setNodes: (nodes: Node[]) => void;
   setEdges: (edges: Edge[]) => void;
@@ -36,7 +37,25 @@ export const useFlowStore = create<FlowState>((set, get) => ({
   selectedNodeId: null,
 
   onNodesChange: (changes) => {
-    set({ nodes: applyNodeChanges(changes, get().nodes) });
+    const removedIds = changes
+      .filter((c): c is { type: 'remove'; id: string } => c.type === 'remove')
+      .map((c) => c.id);
+
+    const newNodes = applyNodeChanges(changes, get().nodes);
+
+    if (removedIds.length > 0) {
+      set({
+        nodes: newNodes,
+        edges: get().edges.filter(
+          (e) => !removedIds.includes(e.source) && !removedIds.includes(e.target)
+        ),
+        selectedNodeId: removedIds.includes(get().selectedNodeId || '')
+          ? null
+          : get().selectedNodeId,
+      });
+    } else {
+      set({ nodes: newNodes });
+    }
   },
 
   onEdgesChange: (changes) => {
@@ -48,6 +67,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
       edges: addEdge(
         {
           ...connection,
+          type: 'deletable',
           animated: true,
           style: { stroke: '#94a3b8', strokeWidth: 2 },
         },
@@ -68,6 +88,10 @@ export const useFlowStore = create<FlowState>((set, get) => ({
           : node
       ),
     });
+  },
+
+  removeEdge: (edgeId) => {
+    set({ edges: get().edges.filter((e) => e.id !== edgeId) });
   },
 
   removeNode: (nodeId) => {
