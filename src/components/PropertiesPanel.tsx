@@ -199,7 +199,8 @@ function MessageProperties({ data, update }: { data: Record<string, unknown>; up
         ]}
       />
       <div className="text-[10px] text-[var(--color-text-muted)] leading-relaxed">
-        HTML-теги: &lt;b&gt;жирный&lt;/b&gt;, &lt;i&gt;курсив&lt;/i&gt;, &lt;a href="url"&gt;ссылка&lt;/a&gt;
+        Используйте {`{{имя_переменной}}`} для вставки сохранённых значений.<br />
+        HTML: &lt;b&gt;жирный&lt;/b&gt;, &lt;i&gt;курсив&lt;/i&gt;
       </div>
     </div>
   );
@@ -232,6 +233,17 @@ function ButtonsProperties({ data, update }: { data: Record<string, unknown>; up
 
   return (
     <div className="flex flex-col gap-3">
+      <InputField
+        label="Сохранить выбор в переменную"
+        value={(data.saveToVariable as string) || ''}
+        onChange={(v) => update({ saveToVariable: v })}
+        placeholder="тип_сайта"
+        mono
+      />
+      <div className="text-[10px] text-[var(--color-text-muted)] leading-relaxed">
+        Текст выбранной кнопки сохранится в переменную. Используйте {`{{имя_переменной}}`} в сообщениях.
+      </div>
+
       <SelectField
         label="Расположение"
         value={(data.layout as string) || 'vertical'}

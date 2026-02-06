@@ -7,9 +7,13 @@ import type { SimulationResult } from '../services/botEngine.ts';
 import type { ButtonItem } from '../types/index.ts';
 
 function applyResult(result: SimulationResult) {
-  const { addMessages, setPendingInput } = useSimulatorStore.getState();
+  const { addMessages, setPendingInput, setVariable } = useSimulatorStore.getState();
   if (result.messages.length > 0) {
     addMessages(result.messages);
+  }
+  // Save variable assignments from the result
+  for (const va of result.variableAssignments) {
+    setVariable(va.name, va.value);
   }
   setPendingInput(result.pendingInputNodeId);
 }
@@ -20,7 +24,7 @@ export function ChatSimulator() {
   const addMessage = useSimulatorStore((s) => s.addMessage);
   const clearMessages = useSimulatorStore((s) => s.clearMessages);
   const pendingInputNodeId = useSimulatorStore((s) => s.pendingInputNodeId);
-  const setVariable = useSimulatorStore((s) => s.setVariable);
+  const variables = useSimulatorStore((s) => s.variables);
   const nodes = useFlowStore((s) => s.nodes);
   const edges = useFlowStore((s) => s.edges);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -42,25 +46,17 @@ export function ChatSimulator() {
 
     setInput('');
 
-    // If waiting for user input, save variable and continue from that node
+    // If waiting for user input, continue from that node (variable saving handled by continueFromInputWait)
     if (pendingInputNodeId) {
-      const pendingNode = nodes.find((n) => n.id === pendingInputNodeId);
-      if (pendingNode) {
-        const data = pendingNode.data as Record<string, unknown>;
-        const varName = (data.variableName as string) || '';
-        if (varName) {
-          setVariable(varName, trimmed);
-        }
-      }
       setTimeout(() => {
-        const result = continueFromInputWait(pendingInputNodeId, nodes, edges);
+        const result = continueFromInputWait(pendingInputNodeId, trimmed, nodes, edges, variables);
         applyResult(result);
       }, 300);
       return;
     }
 
     setTimeout(() => {
-      const result = simulateInput(trimmed, nodes, edges);
+      const result = simulateInput(trimmed, nodes, edges, variables);
       applyResult(result);
     }, 300);
   };
@@ -82,7 +78,8 @@ export function ChatSimulator() {
       const result = simulateButtonClick(
         btn.callbackData || btn.text,
         nodes,
-        edges
+        edges,
+        variables
       );
       applyResult(result);
     }, 300);

@@ -2,9 +2,22 @@ import type { Node, Edge } from '@xyflow/react';
 import type { SimMessage, ButtonItem, TelegramUpdate } from '../types/index.ts';
 import * as telegramApi from './telegramApi.ts';
 
+export interface VariableAssignment {
+  name: string;
+  value: string;
+}
+
 export interface SimulationResult {
   messages: SimMessage[];
   pendingInputNodeId: string | null;
+  variableAssignments: VariableAssignment[];
+}
+
+// Interpolate variables in text: {{varName}} -> value
+function interpolateVariables(text: string, variables: Record<string, string>): string {
+  return text.replace(/\{\{(\w+)\}\}/g, (_, varName) => {
+    return variables[varName] ?? `{{${varName}}}`;
+  });
 }
 
 // Find a command node matching the input
@@ -36,9 +49,11 @@ function processFlow(
   startNode: Node,
   nodes: Node[],
   edges: Edge[],
-  userInput?: string
+  userInput?: string,
+  variables: Record<string, string> = {}
 ): SimulationResult {
   const messages: SimMessage[] = [];
+  const variableAssignments: VariableAssignment[] = [];
   const visited = new Set<string>();
   const queue: Node[] = [startNode];
 
@@ -57,7 +72,8 @@ function processFlow(
       }
 
       case 'message': {
-        const text = (data.text as string) || '(пустое сообщение)';
+        const rawText = (data.text as string) || '(пустое сообщение)';
+        const text = interpolateVariables(rawText, variables);
         // Check if next node is a buttons node to attach buttons
         const buttonNode = nextNodes.find((n) => n.type === 'buttons');
         const otherNext = nextNodes.filter((n) => n.type !== 'buttons');
@@ -127,7 +143,8 @@ function processFlow(
       }
 
       case 'broadcast': {
-        const broadcastMsg = (data.message as string) || '(пусто)';
+        const rawMsg = (data.message as string) || '(пусто)';
+        const broadcastMsg = interpolateVariables(rawMsg, variables);
         messages.push({
           id: crypto.randomUUID(),
           sender: 'bot',
@@ -140,7 +157,8 @@ function processFlow(
 
       case 'image': {
         const imageUrl = (data.imageUrl as string) || '';
-        const caption = (data.caption as string) || '';
+        const rawCaption = (data.caption as string) || '';
+        const caption = interpolateVariables(rawCaption, variables);
         const display = caption
           ? `[Изображение] ${caption}`
           : `[Изображение: ${imageUrl || 'нет URL'}]`;
@@ -184,7 +202,8 @@ function processFlow(
       }
 
       case 'inputWait': {
-        const promptText = (data.promptText as string) || 'Ожидание ответа...';
+        const rawPrompt = (data.promptText as string) || 'Ожидание ответа...';
+        const promptText = interpolateVariables(rawPrompt, variables);
         messages.push({
           id: crypto.randomUUID(),
           sender: 'bot',
@@ -192,24 +211,25 @@ function processFlow(
           timestamp: Date.now(),
         });
         // Pause processing — wait for user input
-        return { messages, pendingInputNodeId: currentNode.id };
+        return { messages, pendingInputNodeId: currentNode.id, variableAssignments };
       }
     }
   }
 
-  return { messages, pendingInputNodeId: null };
+  return { messages, pendingInputNodeId: null, variableAssignments };
 }
 
 // Simulate user command or text input
 export function simulateInput(
   input: string,
   nodes: Node[],
-  edges: Edge[]
+  edges: Edge[],
+  variables: Record<string, string> = {}
 ): SimulationResult {
   if (input.startsWith('/')) {
     const commandNode = findCommandNode(nodes, input);
     if (commandNode) {
-      return processFlow(commandNode, nodes, edges, input);
+      return processFlow(commandNode, nodes, edges, input, variables);
     }
     return {
       messages: [
@@ -221,6 +241,7 @@ export function simulateInput(
         },
       ],
       pendingInputNodeId: null,
+      variableAssignments: [],
     };
   }
 
@@ -236,57 +257,91 @@ export function simulateInput(
     else if (condType === 'text_contains') match = input.includes(condValue);
 
     if (match) {
-      return processFlow(condNode, nodes, edges, input);
+      return processFlow(condNode, nodes, edges, input, variables);
     }
   }
 
-  return { messages: [], pendingInputNodeId: null };
+  return { messages: [], pendingInputNodeId: null, variableAssignments: [] };
 }
 
 // Simulate a button click
 export function simulateButtonClick(
   callbackData: string,
   nodes: Node[],
-  edges: Edge[]
+  edges: Edge[],
+  variables: Record<string, string> = {}
 ): SimulationResult {
+  const variableAssignments: VariableAssignment[] = [];
+
   for (const node of nodes) {
     if (node.type === 'buttons') {
       const data = node.data as Record<string, unknown>;
       const buttons = data.buttons as ButtonItem[];
       const btn = buttons?.find((b) => b.callbackData === callbackData);
       if (btn) {
+        // Save button text to variable if saveToVariable is set
+        const saveToVariable = data.saveToVariable as string;
+        if (saveToVariable) {
+          variableAssignments.push({
+            name: saveToVariable,
+            value: btn.text,
+          });
+          // Update variables for subsequent processing
+          variables = { ...variables, [saveToVariable]: btn.text };
+        }
+
         const nextNodes = findNextNodes(nodes, edges, node.id);
         const allMessages: SimMessage[] = [];
         let pendingId: string | null = null;
         for (const next of nextNodes) {
-          const result = processFlow(next, nodes, edges, callbackData);
+          const result = processFlow(next, nodes, edges, callbackData, variables);
           allMessages.push(...result.messages);
+          variableAssignments.push(...result.variableAssignments);
           if (result.pendingInputNodeId) pendingId = result.pendingInputNodeId;
         }
-        return { messages: allMessages, pendingInputNodeId: pendingId };
+        return { messages: allMessages, pendingInputNodeId: pendingId, variableAssignments };
       }
     }
   }
-  return { messages: [], pendingInputNodeId: null };
+  return { messages: [], pendingInputNodeId: null, variableAssignments: [] };
 }
 
 // Continue flow after user provides input for an inputWait node
 export function continueFromInputWait(
   nodeId: string,
+  userInput: string,
   nodes: Node[],
-  edges: Edge[]
+  edges: Edge[],
+  variables: Record<string, string> = {}
 ): SimulationResult {
+  const variableAssignments: VariableAssignment[] = [];
+
+  // Find the inputWait node and save input to variable if configured
+  const inputNode = nodes.find((n) => n.id === nodeId);
+  if (inputNode && inputNode.type === 'inputWait') {
+    const data = inputNode.data as Record<string, unknown>;
+    const variableName = data.variableName as string;
+    if (variableName) {
+      variableAssignments.push({
+        name: variableName,
+        value: userInput,
+      });
+      variables = { ...variables, [variableName]: userInput };
+    }
+  }
+
   const nextNodes = findNextNodes(nodes, edges, nodeId);
   const allMessages: SimMessage[] = [];
   let pendingId: string | null = null;
 
   for (const next of nextNodes) {
-    const result = processFlow(next, nodes, edges);
+    const result = processFlow(next, nodes, edges, userInput, variables);
     allMessages.push(...result.messages);
+    variableAssignments.push(...result.variableAssignments);
     if (result.pendingInputNodeId) pendingId = result.pendingInputNodeId;
   }
 
-  return { messages: allMessages, pendingInputNodeId: pendingId };
+  return { messages: allMessages, pendingInputNodeId: pendingId, variableAssignments };
 }
 
 // Deploy bot: register commands with Telegram

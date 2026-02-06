@@ -23,6 +23,7 @@ export interface ButtonItem {
 export interface ButtonsNodeData extends Record<string, unknown> {
   buttons: ButtonItem[];
   layout: 'vertical' | 'horizontal';
+  saveToVariable: string;
 }
 
 export interface ConditionNodeData extends Record<string, unknown> {
