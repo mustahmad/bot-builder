@@ -48,16 +48,16 @@ export function Header({ saveStatus = 'idle', onForceSave }: HeaderProps) {
   const [deploySuccess, setDeploySuccess] = useState(false);
 
   const handleDeploy = async () => {
-    if (!token) return;
+    if (!token || !activeProjectId) return;
     setDeploying(true);
     setError(null);
     setDeploySuccess(false);
 
     try {
-      await deployBot(token, nodes);
+      await deployBot(token, nodes, activeProjectId);
       setDeployed(true);
       setDeploySuccess(true);
-      startPolling();
+      // No more polling needed - webhook handles updates
       setTimeout(() => setDeploySuccess(false), 3000);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка деплоя');

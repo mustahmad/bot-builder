@@ -5,6 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import authRoutes from './routes/auth.js';
 import projectRoutes from './routes/projects.js';
+import webhookRoutes from './routes/webhook.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -25,6 +26,7 @@ app.use(express.json({ limit: '10mb' }));
 // API маршруты
 app.use('/api/auth', authRoutes);
 app.use('/api/projects', projectRoutes);
+app.use('/api/webhook', webhookRoutes);
 
 // В продакшене раздаём собранный фронтенд
 const distPath = path.join(__dirname, '..', 'dist');

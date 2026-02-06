@@ -98,3 +98,27 @@ export async function answerCallbackQuery(
   if (!data.ok)
     throw new Error(data.description || 'Failed to answer callback');
 }
+
+export async function setWebhook(
+  token: string,
+  url: string
+): Promise<void> {
+  const response = await fetch(`${BASE_URL}${token}/setWebhook`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url }),
+  });
+  const data = await response.json();
+  if (!data.ok)
+    throw new Error(data.description || 'Failed to set webhook');
+}
+
+export async function deleteWebhook(token: string): Promise<void> {
+  const response = await fetch(`${BASE_URL}${token}/deleteWebhook`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  const data = await response.json();
+  if (!data.ok)
+    throw new Error(data.description || 'Failed to delete webhook');
+}

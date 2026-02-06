@@ -362,11 +362,13 @@ export function continueFromInputWait(
   return { messages: allMessages, pendingInputNodeId: pendingId, variableAssignments };
 }
 
-// Deploy bot: register commands with Telegram
+// Deploy bot: register commands and webhook with Telegram
 export async function deployBot(
   token: string,
-  nodes: Node[]
+  nodes: Node[],
+  projectId: string
 ): Promise<void> {
+  // Register commands
   const commandNodes = nodes.filter((n) => n.type === 'command');
   const commands = commandNodes.map((n) => {
     const data = n.data as Record<string, unknown>;
@@ -379,6 +381,11 @@ export async function deployBot(
   if (commands.length > 0) {
     await telegramApi.setMyCommands(token, commands);
   }
+
+  // Set webhook URL
+  const baseUrl = window.location.origin;
+  const webhookUrl = `${baseUrl}/api/webhook/${projectId}`;
+  await telegramApi.setWebhook(token, webhookUrl);
 }
 
 // Helper to send messages with optional buttons
