@@ -36,9 +36,11 @@ export interface SimulationResult {
 }
 
 // Interpolate variables in text: {{varName}} -> value
+// Supports Cyrillic, Latin, numbers, underscores, and spaces
 function interpolateVariables(text: string, variables: Record<string, string>): string {
-  return text.replace(/\{\{(\w+)\}\}/g, (_, varName) => {
-    return variables[varName] ?? `{{${varName}}}`;
+  return text.replace(/\{\{([^}]+)\}\}/g, (match, varName) => {
+    const trimmed = varName.trim();
+    return variables[trimmed] ?? match;
   });
 }
 
