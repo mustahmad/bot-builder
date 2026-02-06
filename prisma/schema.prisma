@@ -28,6 +28,20 @@ model Project {
   updatedAt DateTime @updatedAt @map("updated_at")
   userId    String   @map("user_id")
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chatStates ChatState[]
 
   @@map("projects")
+}
+
+model ChatState {
+  id                 String   @id @default(uuid())
+  projectId          String   @map("project_id")
+  chatId             BigInt   @map("chat_id")
+  pendingInputNodeId String?  @map("pending_input_node_id")
+  variables          Json     @default("{}")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+  project            Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, chatId])
+  @@map("chat_states")
 }

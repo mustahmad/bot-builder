@@ -65,31 +65,57 @@ interface FlowEdge {
   targetHandle?: string;
 }
 
-// Chat state storage (per project, per chat)
-interface ChatState {
+// Chat state interface
+interface ChatStateData {
   pendingInputNodeId: string | null;
   variables: Record<string, string>;
 }
-const chatStates = new Map<string, ChatState>();
 
-function getChatStateKey(projectId: string, chatId: number): string {
-  return `${projectId}:${chatId}`;
-}
+// Get chat state from database
+async function getChatState(projectId: string, chatId: number): Promise<ChatStateData> {
+  const state = await prisma.chatState.findUnique({
+    where: {
+      projectId_chatId: { projectId, chatId: BigInt(chatId) },
+    },
+  });
 
-function getChatState(projectId: string, chatId: number): ChatState {
-  const key = getChatStateKey(projectId, chatId);
-  if (!chatStates.has(key)) {
-    chatStates.set(key, { pendingInputNodeId: null, variables: {} });
+  if (!state) {
+    return { pendingInputNodeId: null, variables: {} };
   }
-  return chatStates.get(key)!;
+
+  return {
+    pendingInputNodeId: state.pendingInputNodeId,
+    variables: state.variables as Record<string, string>,
+  };
 }
 
-function updateChatState(projectId: string, chatId: number, result: SimulationResult): void {
-  const state = getChatState(projectId, chatId);
-  state.pendingInputNodeId = result.pendingInputNodeId;
+// Update chat state in database
+async function updateChatState(
+  projectId: string,
+  chatId: number,
+  result: SimulationResult,
+  existingVariables: Record<string, string>
+): Promise<void> {
+  const variables = { ...existingVariables };
   for (const va of result.variableAssignments) {
-    state.variables[va.name] = va.value;
+    variables[va.name] = va.value;
   }
+
+  await prisma.chatState.upsert({
+    where: {
+      projectId_chatId: { projectId, chatId: BigInt(chatId) },
+    },
+    update: {
+      pendingInputNodeId: result.pendingInputNodeId,
+      variables,
+    },
+    create: {
+      projectId,
+      chatId: BigInt(chatId),
+      pendingInputNodeId: result.pendingInputNodeId,
+      variables,
+    },
+  });
 }
 
 // Interpolate variables in text: {{varName}} -> value
@@ -393,7 +419,10 @@ router.post('/:projectId', async (req, res) => {
     if (update.message?.text) {
       const chatId = update.message.chat.id;
       const text = update.message.text;
-      const state = getChatState(projectId, chatId);
+      const state = await getChatState(projectId, chatId);
+
+      console.log(`[Webhook] Text message from ${chatId}: "${text}"`);
+      console.log(`[Webhook] Current state:`, JSON.stringify(state));
 
       let result: SimulationResult;
 
@@ -409,7 +438,13 @@ router.post('/:projectId', async (req, res) => {
         result = simulateInput(text, nodes, edges, state.variables);
       }
 
-      updateChatState(projectId, chatId, result);
+      console.log(`[Webhook] Result:`, JSON.stringify({
+        messagesCount: result.messages.length,
+        pendingInputNodeId: result.pendingInputNodeId,
+        variableAssignments: result.variableAssignments,
+      }));
+
+      await updateChatState(projectId, chatId, result, state.variables);
 
       for (const msg of result.messages) {
         await sendTelegramMessage(token, chatId, msg.text, msg.buttons);
@@ -424,10 +459,20 @@ router.post('/:projectId', async (req, res) => {
       await answerCallbackQuery(token, update.callback_query.id);
 
       if (chatId && callbackData) {
-        const state = getChatState(projectId, chatId);
+        const state = await getChatState(projectId, chatId);
+
+        console.log(`[Webhook] Button click from ${chatId}: "${callbackData}"`);
+        console.log(`[Webhook] Current state:`, JSON.stringify(state));
+
         const result = simulateButtonClick(callbackData, nodes, edges, state.variables);
 
-        updateChatState(projectId, chatId, result);
+        console.log(`[Webhook] Result:`, JSON.stringify({
+          messagesCount: result.messages.length,
+          pendingInputNodeId: result.pendingInputNodeId,
+          variableAssignments: result.variableAssignments,
+        }));
+
+        await updateChatState(projectId, chatId, result, state.variables);
 
         for (const msg of result.messages) {
           await sendTelegramMessage(token, chatId, msg.text, msg.buttons);
