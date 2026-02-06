@@ -245,6 +245,54 @@ function processFlow(
         });
         return { messages, pendingInputNodeId: currentNode.id, variableAssignments };
       }
+
+      case 'delay': {
+        // Store delay info for later processing
+        const seconds = (data.delaySeconds as number) ?? 3;
+        messages.push({
+          id: crypto.randomUUID(),
+          sender: 'bot',
+          text: `__DELAY__${seconds}`,
+          timestamp: Date.now(),
+        });
+        queue.push(...nextNodes);
+        break;
+      }
+
+      case 'broadcast': {
+        const rawMsg = (data.message as string) || '(пусто)';
+        const broadcastMsg = interpolateVariables(rawMsg, variables);
+        messages.push({
+          id: crypto.randomUUID(),
+          sender: 'bot',
+          text: broadcastMsg,
+          timestamp: Date.now(),
+        });
+        queue.push(...nextNodes);
+        break;
+      }
+
+      case 'image': {
+        const imageUrl = (data.imageUrl as string) || '';
+        const rawCaption = (data.caption as string) || '';
+        const caption = interpolateVariables(rawCaption, variables);
+        messages.push({
+          id: crypto.randomUUID(),
+          sender: 'bot',
+          text: caption || `[Изображение: ${imageUrl}]`,
+          imageUrl: imageUrl || undefined,
+          timestamp: Date.now(),
+        } as SimMessage);
+        queue.push(...nextNodes);
+        break;
+      }
+
+      case 'apiRequest': {
+        // In webhook, skip API request simulation - just continue
+        const successNodes = findNextNodes(nodes, edges, currentNode.id, 'success');
+        queue.push(...successNodes);
+        break;
+      }
     }
   }
 
@@ -398,6 +446,36 @@ async function answerCallbackQuery(token: string, callbackQueryId: string): Prom
   });
 }
 
+async function sendChatAction(token: string, chatId: number, action: string): Promise<void> {
+  await fetch(`https://api.telegram.org/bot${token}/sendChatAction`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: chatId, action }),
+  });
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Send messages with delay support
+async function sendMessagesWithDelay(
+  token: string,
+  chatId: number,
+  messages: SimMessage[]
+): Promise<void> {
+  for (const msg of messages) {
+    // Check for delay marker
+    if (msg.text.startsWith('__DELAY__')) {
+      const seconds = parseInt(msg.text.replace('__DELAY__', ''), 10) || 2;
+      await sendChatAction(token, chatId, 'typing');
+      await sleep(seconds * 1000);
+      continue;
+    }
+    await sendTelegramMessage(token, chatId, msg.text, msg.buttons);
+  }
+}
+
 // Webhook endpoint
 router.post('/:projectId', async (req, res) => {
   const { projectId } = req.params;
@@ -448,9 +526,8 @@ router.post('/:projectId', async (req, res) => {
 
       await updateChatState(projectId, chatId, result, state.variables);
 
-      for (const msg of result.messages) {
-        await sendTelegramMessage(token, chatId, msg.text, msg.buttons);
-      }
+      // Send messages with delay support
+      await sendMessagesWithDelay(token, chatId, result.messages);
     }
 
     // Handle callback query (button click)
@@ -476,9 +553,8 @@ router.post('/:projectId', async (req, res) => {
 
         await updateChatState(projectId, chatId, result, state.variables);
 
-        for (const msg of result.messages) {
-          await sendTelegramMessage(token, chatId, msg.text, msg.buttons);
-        }
+        // Send messages with delay support
+        await sendMessagesWithDelay(token, chatId, result.messages)
       }
     }
 
