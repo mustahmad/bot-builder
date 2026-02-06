@@ -2,6 +2,28 @@ import type { Node, Edge } from '@xyflow/react';
 import type { SimMessage, ButtonItem, TelegramUpdate } from '../types/index.ts';
 import * as telegramApi from './telegramApi.ts';
 
+// Store chat states for Telegram (pending input and variables per chat)
+interface ChatState {
+  pendingInputNodeId: string | null;
+  variables: Record<string, string>;
+}
+const chatStates = new Map<number, ChatState>();
+
+function getChatState(chatId: number): ChatState {
+  if (!chatStates.has(chatId)) {
+    chatStates.set(chatId, { pendingInputNodeId: null, variables: {} });
+  }
+  return chatStates.get(chatId)!;
+}
+
+function updateChatState(chatId: number, result: SimulationResult): void {
+  const state = getChatState(chatId);
+  state.pendingInputNodeId = result.pendingInputNodeId;
+  for (const va of result.variableAssignments) {
+    state.variables[va.name] = va.value;
+  }
+}
+
 export interface VariableAssignment {
   name: string;
   value: string;
@@ -359,6 +381,45 @@ export async function deployBot(
   }
 }
 
+// Helper to send messages with optional buttons
+function sendTelegramMessage(
+  token: string,
+  chatId: number,
+  response: SimMessage
+): void {
+  let replyMarkup: unknown = undefined;
+
+  if (response.buttons && response.buttons.length > 0) {
+    const inlineButtons = response.buttons.filter(
+      (b: ButtonItem) => b.buttonType === 'inline'
+    );
+    const replyButtons = response.buttons.filter(
+      (b: ButtonItem) => b.buttonType === 'reply'
+    );
+
+    if (inlineButtons.length > 0) {
+      replyMarkup = {
+        inline_keyboard: inlineButtons.map((b: ButtonItem) => [
+          {
+            text: b.text,
+            callback_data: b.callbackData || b.text,
+            url: b.url || undefined,
+          },
+        ]),
+      };
+    } else if (replyButtons.length > 0) {
+      replyMarkup = {
+        keyboard: replyButtons.map((b: ButtonItem) => [{ text: b.text }]),
+        resize_keyboard: true,
+      };
+    }
+  }
+
+  telegramApi
+    .sendMessage(token, chatId, response.text, { replyMarkup })
+    .catch(console.error);
+}
+
 // Handle an incoming Telegram update
 export function handleUpdate(
   update: TelegramUpdate,
@@ -369,42 +430,29 @@ export function handleUpdate(
   if (update.message?.text) {
     const chatId = update.message.chat.id;
     const text = update.message.text;
-    const { messages: responses } = simulateInput(text, nodes, edges);
+    const state = getChatState(chatId);
 
-    for (const response of responses) {
-      let replyMarkup: unknown = undefined;
+    let result: SimulationResult;
 
-      if (response.buttons && response.buttons.length > 0) {
-        const inlineButtons = response.buttons.filter(
-          (b: ButtonItem) => b.buttonType === 'inline'
-        );
-        const replyButtons = response.buttons.filter(
-          (b: ButtonItem) => b.buttonType === 'reply'
-        );
+    // Check if this chat is waiting for text input
+    if (state.pendingInputNodeId) {
+      result = continueFromInputWait(
+        state.pendingInputNodeId,
+        text,
+        nodes,
+        edges,
+        state.variables
+      );
+    } else {
+      result = simulateInput(text, nodes, edges, state.variables);
+    }
 
-        if (inlineButtons.length > 0) {
-          replyMarkup = {
-            inline_keyboard: inlineButtons.map((b: ButtonItem) => [
-              {
-                text: b.text,
-                callback_data: b.callbackData || b.text,
-                url: b.url || undefined,
-              },
-            ]),
-          };
-        } else if (replyButtons.length > 0) {
-          replyMarkup = {
-            keyboard: replyButtons.map((b: ButtonItem) => [{ text: b.text }]),
-            resize_keyboard: true,
-          };
-        }
-      }
+    // Update chat state with result
+    updateChatState(chatId, result);
 
-      telegramApi
-        .sendMessage(token, chatId, response.text, {
-          replyMarkup,
-        })
-        .catch(console.error);
+    // Send all response messages
+    for (const response of result.messages) {
+      sendTelegramMessage(token, chatId, response);
     }
   }
 
@@ -417,41 +465,15 @@ export function handleUpdate(
       .catch(console.error);
 
     if (chatId && callbackData) {
-      const { messages: responses } = simulateButtonClick(callbackData, nodes, edges);
-      for (const response of responses) {
-        let replyMarkup: unknown = undefined;
+      const state = getChatState(chatId);
+      const result = simulateButtonClick(callbackData, nodes, edges, state.variables);
 
-        if (response.buttons && response.buttons.length > 0) {
-          const inlineButtons = response.buttons.filter(
-            (b: ButtonItem) => b.buttonType === 'inline'
-          );
-          const replyButtons = response.buttons.filter(
-            (b: ButtonItem) => b.buttonType === 'reply'
-          );
+      // Update chat state with result
+      updateChatState(chatId, result);
 
-          if (inlineButtons.length > 0) {
-            replyMarkup = {
-              inline_keyboard: inlineButtons.map((b: ButtonItem) => [
-                {
-                  text: b.text,
-                  callback_data: b.callbackData || b.text,
-                  url: b.url || undefined,
-                },
-              ]),
-            };
-          } else if (replyButtons.length > 0) {
-            replyMarkup = {
-              keyboard: replyButtons.map((b: ButtonItem) => [{ text: b.text }]),
-              resize_keyboard: true,
-            };
-          }
-        }
-
-        telegramApi
-          .sendMessage(token, chatId, response.text, {
-            replyMarkup,
-          })
-          .catch(console.error);
+      // Send all response messages
+      for (const response of result.messages) {
+        sendTelegramMessage(token, chatId, response);
       }
     }
   }
